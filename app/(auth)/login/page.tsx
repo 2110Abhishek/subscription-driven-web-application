@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth, UserRole } from '@/lib/auth/auth-context';
-import { Trophy, Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
+import { Trophy, Lock, Mail, ArrowRight, ShieldCheck, UserCheck } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,16 +28,21 @@ export default function LoginPage() {
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.error || 'Login failed. Please check your credentials.');
+        throw new Error(data.error || 'Login failed');
       }
 
       const role = data.user.role as UserRole;
       loginAs(role, data.user.email, data.user.name);
       router.push(role === 'admin' ? '/admin' : '/dashboard');
     } catch (err: any) {
-      setErrorMsg(err.message || 'Login failed. Please check your email and password.');
+      setErrorMsg(err.message || 'Login failed');
       setLoading(false);
     }
+  };
+
+  const handleQuickAccess = (userEmail: string, userRole: UserRole, userName: string) => {
+    loginAs(userRole, userEmail, userName);
+    router.push(userRole === 'admin' ? '/admin' : '/dashboard');
   };
 
   return (
@@ -59,28 +64,12 @@ export default function LoginPage() {
             <Trophy style={{ width: '26px', height: '26px', color: '#040D1A' }} />
           </div>
           <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>Welcome Back</h1>
-          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
-            Sign in with your email and password to access your portal
-          </p>
+          <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Sign in to manage scores, charity & draws</p>
         </div>
 
         {errorMsg && (
-          <div
-            style={{
-              background: 'rgba(239, 68, 68, 0.15)',
-              border: '1px solid #EF4444',
-              color: '#FCA5A5',
-              padding: '0.75rem 1rem',
-              borderRadius: 'var(--radius-md)',
-              marginBottom: '1.25rem',
-              fontSize: '0.85rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-            }}
-          >
-            <AlertCircle style={{ width: '16px', height: '16px', flexShrink: 0 }} />
-            <span>{errorMsg}</span>
+          <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #EF4444', color: '#FCA5A5', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem', fontSize: '0.85rem' }}>
+            {errorMsg}
           </div>
         )}
 
@@ -132,7 +121,7 @@ export default function LoginPage() {
               <input
                 type="password"
                 required
-                placeholder="Enter your password"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="input-field"
@@ -151,7 +140,41 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <div style={{ textAlign: 'center', marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
+        {/* Real Quick Access Accounts */}
+        <div style={{ marginTop: '2rem', paddingTop: '1.5rem', borderTop: '1px solid var(--border-subtle)' }}>
+          <div style={{ fontSize: '0.8rem', color: 'var(--text-subtle)', textAlign: 'center', marginBottom: '0.75rem' }}>
+            Quick Account Access
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <button
+              type="button"
+              onClick={() => handleQuickAccess('agchoudhari2110@gmail.com', 'subscriber', 'Abhishek Choudhari')}
+              className="btn btn-secondary"
+              style={{ fontSize: '0.8rem', padding: '0.65rem', justifyContent: 'center' }}
+            >
+              <UserCheck style={{ width: '14px', height: '14px', color: 'var(--accent-cyan)' }} />
+              Subscriber
+            </button>
+            <button
+              type="button"
+              onClick={() => handleQuickAccess('admin@digitalheroes.co.in', 'admin', 'Abhishek Choudhari')}
+              className="btn"
+              style={{
+                fontSize: '0.8rem',
+                padding: '0.65rem',
+                justifyContent: 'center',
+                background: 'rgba(255, 184, 0, 0.1)',
+                color: '#FFB800',
+                border: '1px solid rgba(255, 184, 0, 0.25)',
+              }}
+            >
+              <ShieldCheck style={{ width: '14px', height: '14px' }} />
+              Admin
+            </button>
+          </div>
+        </div>
+
+        <div style={{ textAlign: 'center', marginTop: '1.75rem', fontSize: '0.9rem', color: 'var(--text-muted)' }}>
           Don't have an account?{' '}
           <Link href="/signup" style={{ color: 'var(--accent-cyan)', fontWeight: 600 }}>
             Sign Up

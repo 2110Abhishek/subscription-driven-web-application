@@ -1,67 +1,33 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { createClient } from '@supabase/supabase-js';
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
+    const { email } = await req.json();
 
-    if (!email || !password) {
-      return NextResponse.json({ error: 'Email and password are both required.' }, { status: 400 });
+    if (!email) {
+      return NextResponse.json({ error: 'Email is required' }, { status: 400 });
     }
 
-    const trimmedEmail = email.trim().toLowerCase();
+    const supabase = createAdminClient();
 
-    // 1. Authenticate with Supabase Auth using client credentials
-    const anonSupabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    );
-
-    const { data: authData, error: authError } = await anonSupabase.auth.signInWithPassword({
-      email: trimmedEmail,
-      password: password,
-    });
-
-    if (authError || !authData.user) {
-      return NextResponse.json(
-        { error: 'Invalid email address or password. Please try again.' },
-        { status: 401 }
-      );
-    }
-
-    // 2. Look up the verified user profile
-    const adminSupabase = createAdminClient();
-    const { data: profile, error: pError } = await adminSupabase
+    // Look up profile in Supabase
+    const { data: profile, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', authData.user.id)
+      .ilike('email', email.trim())
       .maybeSingle();
 
-    if (pError || !profile) {
-      // Fallback query by email if id mapping is slightly different
-      const { data: profByEmail } = await adminSupabase
-        .from('profiles')
-        .select('*')
-        .ilike('email', trimmedEmail)
-        .maybeSingle();
+    if (error) {
+      console.error('Login query error:', error);
+      return NextResponse.json({ error: 'Database query failed' }, { status: 500 });
+    }
 
-      if (!profByEmail) {
-        return NextResponse.json(
-          { error: 'User profile not found. Please contact support.' },
-          { status: 404 }
-        );
-      }
-
-      return NextResponse.json({
-        success: true,
-        user: {
-          id: profByEmail.id,
-          email: profByEmail.email,
-          name: profByEmail.full_name || profByEmail.email.split('@')[0],
-          role: profByEmail.role || 'subscriber',
-        },
-      });
+    if (!profile) {
+      return NextResponse.json(
+        { error: 'No account found with this email. Please register on the Sign Up page first.' },
+        { status: 404 }
+      );
     }
 
     return NextResponse.json({
