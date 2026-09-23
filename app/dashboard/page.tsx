@@ -2,51 +2,56 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trophy, Heart, Award, ArrowRight, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
-import { useAuth } from '@/lib/auth/auth-context';
+import { Trophy, Heart, Award, ArrowRight, ShieldCheck, RefreshCw, AlertCircle } from 'lucide-react';
 import { SubscriptionService, ActiveSubscription } from '@/services/subscription.service';
 
 export default function DashboardOverviewPage() {
-  const { user } = useAuth();
+  const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [activeSub, setActiveSub] = useState<ActiveSubscription | null>(null);
-  const [data, setData] = useState<{
-    scores: { id: string; score: number; scoreDate: string }[];
-    subscription: { status: string; plan: string; renewalDate: string };
-    winningsSummary: { totalAmount: string; hasVerifiedPrize: boolean; payoutCompleted: boolean };
-    charities: any[];
-  } | null>(null);
+
+  const loadData = () => {
+    // Read live client subscription state
+    const currentSub = SubscriptionService.getCurrentSubscription();
+    setActiveSub(currentSub);
+
+    fetch('/api/subscriber/data')
+      .then((res) => res.json())
+      .then((d) => {
+        setData(d);
+        setLoading(false);
+      })
+      .catch((err) => {
+        console.error('Failed to fetch dashboard overview:', err);
+        setLoading(false);
+      });
+  };
 
   useEffect(() => {
-    // 1. Check local/service active subscription
-    const localSub = SubscriptionService.getCurrentSubscription();
-    if (localSub) {
-      setActiveSub(localSub);
-    }
-
-    // 2. Fetch live data
-    async function loadData() {
-      try {
-        const email = user?.email || 'agchoudhari2110@gmail.com';
-        const res = await fetch(`/api/subscriber/data?email=${encodeURIComponent(email)}`);
-        const json = await res.json();
-        if (json && !json.error) {
-          setData(json);
-        }
-      } catch (err) {
-        console.error('Failed to load dashboard data:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
     loadData();
-  }, [user?.email]);
+  }, []);
 
+  const handleCancelSub = () => {
+    if (confirm('Are you sure you want to cancel your active subscription? This will cancel your monthly plan.')) {
+      SubscriptionService.cancelSubscription();
+      loadData();
+    }
+  };
+
+  if (loading) {
+    return (
+      <div style={{ padding: '3rem 0', textAlign: 'center', color: 'var(--text-muted)' }}>
+        Loading dashboard metrics...
+      </div>
+    );
+  }
+
+  const user = data?.user;
   const scores = data?.scores || [];
-  const totalWinnings = data?.winningsSummary?.totalAmount || '$0.00';
+  const totalWinnings = data?.winningsSummary?.totalFormatted || '$0.00';
 
-  // Prefer local active subscription if activated via checkout/payment
-  const planName = activeSub?.plan === 'yearly' ? 'Yearly Hero Plan' : 'Monthly Hero Plan';
+  // Prefer active subscription from client service
+  const planName = activeSub?.plan === 'yearly' ? 'Yearly Hero' : activeSub?.plan === 'monthly' ? 'Monthly Hero' : data?.subscription?.plan || 'Monthly Hero';
   const renewalDate = activeSub?.renewalDate || data?.subscription?.renewalDate || 'October 15, 2026';
   const charityName = activeSub?.charityName || data?.charities?.[0]?.name || 'Golf For Good Foundation';
   const charityPercentage = activeSub?.contributionPercentage || 15;
@@ -77,15 +82,24 @@ export default function DashboardOverviewPage() {
             </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
               {isSubscribed
-                ? `Your active subscription is current. Renewal scheduled for ${renewalDate}.`
+                ? `Your active subscription is current (1 subscription per month policy). Renewal: ${renewalDate}.`
                 : 'Subscribe to a plan to activate score tracking and monthly draw participation.'}
             </p>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {!isSubscribed && (
+            {!isSubscribed ? (
               <Link href="/subscribe" className="btn btn-gold">
                 Subscribe Now
               </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCancelSub}
+                className="btn btn-secondary"
+                style={{ fontSize: '0.85rem' }}
+              >
+                <RefreshCw style={{ width: '14px', height: '14px' }} /> Cancel / Reset Subscription
+              </button>
             )}
             <Link href="/dashboard/scores" className="btn btn-primary">
               + Enter New Score
@@ -159,7 +173,7 @@ export default function DashboardOverviewPage() {
           </div>
         ) : (
           <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-            {scores.map((scoreRecord, idx) => (
+            {scores.map((scoreRecord: any, idx: number) => (
               <div key={scoreRecord.id || idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
                 <div className="score-pill">{scoreRecord.score}</div>
                 <span style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>

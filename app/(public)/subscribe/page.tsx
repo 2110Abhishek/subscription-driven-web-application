@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Heart, Sparkles, Check, ArrowRight } from 'lucide-react';
-import { SubscriptionService } from '@/services/subscription.service';
+import Link from 'next/link';
+import { Heart, Sparkles, Check, ArrowRight, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react';
+import { SubscriptionService, ActiveSubscription } from '@/services/subscription.service';
 
 export default function SubscribePage() {
   const router = useRouter();
@@ -12,8 +13,23 @@ export default function SubscribePage() {
   const [selectedCharity, setSelectedCharity] = useState('');
   const [contributionPct, setContributionPct] = useState(15);
   const [loading, setLoading] = useState(false);
+  const [existingSub, setExistingSub] = useState<ActiveSubscription | null>(null);
+  const [subLimitReason, setSubLimitReason] = useState<string | null>(null);
+
+  const checkSubscriptionStatus = () => {
+    const check = SubscriptionService.canSubscribeThisMonth();
+    if (!check.allowed && check.currentSub) {
+      setExistingSub(check.currentSub);
+      setSubLimitReason(check.reason || 'You already have an active subscription for this month.');
+    } else {
+      setExistingSub(null);
+      setSubLimitReason(null);
+    }
+  };
 
   useEffect(() => {
+    checkSubscriptionStatus();
+
     async function load() {
       try {
         const res = await fetch('/api/charities');
@@ -42,6 +58,14 @@ export default function SubscribePage() {
 
   const handleProceedToReview = (e: React.FormEvent) => {
     e.preventDefault();
+
+    // Guard: Prevent subscribing more than once per month
+    const check = SubscriptionService.canSubscribeThisMonth();
+    if (!check.allowed) {
+      setSubLimitReason(check.reason || 'You already have an active subscription for this month.');
+      return;
+    }
+
     setLoading(true);
 
     const selectedCharityObj = charities.find((c) => c.id === selectedCharity);
@@ -60,6 +84,13 @@ export default function SubscribePage() {
     router.push('/checkout');
   };
 
+  const handleCancelExisting = () => {
+    if (confirm('Cancel your existing subscription for testing? This will allow you to subscribe again.')) {
+      SubscriptionService.cancelSubscription();
+      checkSubscriptionStatus();
+    }
+  };
+
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', padding: '4rem 1.5rem' }}>
       <div style={{ textAlign: 'center', marginBottom: '3.5rem' }}>
@@ -71,6 +102,48 @@ export default function SubscribePage() {
         <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
           Choose your billing frequency, select your beneficiary charity, and review before payment.
         </p>
+
+        {/* Existing Active Subscription Notice (1 subscription per month rule) */}
+        {existingSub && (
+          <div
+            className="glass-card"
+            style={{
+              maxWidth: '700px',
+              margin: '2rem auto 0',
+              padding: '1.5rem',
+              textAlign: 'left',
+              border: '1px solid rgba(255, 184, 0, 0.4)',
+              background: 'rgba(255, 184, 0, 0.05)',
+            }}
+          >
+            <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+              <AlertTriangle style={{ width: '28px', height: '28px', color: '#FFB800', flexShrink: 0, marginTop: '2px' }} />
+              <div>
+                <h4 style={{ color: '#FFB800', margin: '0 0 0.5rem', fontSize: '1.1rem' }}>
+                  Active Subscription Already Exists For This Month
+                </h4>
+                <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', margin: '0 0 1rem', lineHeight: '1.5' }}>
+                  {subLimitReason} You are currently on the{' '}
+                  <strong style={{ color: '#FFF' }}>{existingSub.plan === 'yearly' ? 'Yearly' : 'Monthly'} Hero Plan</strong>.
+                  Only one subscription is permitted per billing month.
+                </p>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <Link href="/dashboard" className="btn btn-primary" style={{ padding: '0.5rem 1.25rem', fontSize: '0.9rem' }}>
+                    Go to Your Dashboard <ArrowRight style={{ width: '16px', height: '16px' }} />
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={handleCancelExisting}
+                    className="btn btn-secondary"
+                    style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                  >
+                    <RefreshCw style={{ width: '14px', height: '14px' }} /> Reset / Cancel for Demo Testing
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Billing Toggle */}
         <div style={{
@@ -105,7 +178,7 @@ export default function SubscribePage() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border-subtle)' }}>
           <div>
             <h3 style={{ fontSize: '1.4rem' }}>{billingCycle === 'monthly' ? 'Monthly Hero Plan' : 'Yearly Hero Plan'}</h3>
-            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Billed {billingCycle}. Cancel anytime.</p>
+            <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Billed {billingCycle}. Limited to 1 subscription per month.</p>
           </div>
           <div style={{ textAlign: 'right' }}>
             <span style={{ fontSize: '2.2rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>${price}</span>
@@ -165,14 +238,30 @@ export default function SubscribePage() {
           </div>
         </div>
 
-        <button
-          onClick={handleProceedToReview}
-          disabled={loading}
-          className="btn btn-gold"
-          style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', justifyContent: 'center' }}
-        >
-          {loading ? 'Loading Review...' : 'Continue to Checkout Review'} <ArrowRight style={{ width: '20px', height: '20px' }} />
-        </button>
+        {/* Action Button */}
+        {existingSub ? (
+          <div>
+            <button
+              disabled
+              className="btn btn-secondary"
+              style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', justifyContent: 'center', opacity: 0.6, cursor: 'not-allowed' }}
+            >
+              Subscription Already Active This Month
+            </button>
+            <p style={{ textAlign: 'center', color: '#FFB800', fontSize: '0.85rem', marginTop: '0.75rem' }}>
+              You already have an active subscription for this month. Reset above or visit your dashboard.
+            </p>
+          </div>
+        ) : (
+          <button
+            onClick={handleProceedToReview}
+            disabled={loading}
+            className="btn btn-gold"
+            style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', justifyContent: 'center' }}
+          >
+            {loading ? 'Loading Review...' : 'Continue to Checkout Review'} <ArrowRight style={{ width: '20px', height: '20px' }} />
+          </button>
+        )}
       </div>
     </div>
   );

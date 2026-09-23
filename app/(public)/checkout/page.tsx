@@ -3,16 +3,25 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ShieldCheck, Heart, ArrowLeft, ArrowRight, CheckCircle2, Lock } from 'lucide-react';
-import { SubscriptionService, PendingSubscription } from '@/services/subscription.service';
+import { ShieldCheck, Heart, ArrowLeft, ArrowRight, CheckCircle2, Lock, AlertTriangle } from 'lucide-react';
+import { SubscriptionService, PendingSubscription, ActiveSubscription } from '@/services/subscription.service';
 
 export default function CheckoutReviewPage() {
   const router = useRouter();
   const [sub, setSub] = useState<PendingSubscription | null>(null);
   const [termsAccepted, setTermsAccepted] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [alreadySubscribed, setAlreadySubscribed] = useState<ActiveSubscription | null>(null);
+  const [blockReason, setBlockReason] = useState<string | null>(null);
 
   useEffect(() => {
+    // Check if user already has an active subscription this month
+    const check = SubscriptionService.canSubscribeThisMonth();
+    if (!check.allowed && check.currentSub) {
+      setAlreadySubscribed(check.currentSub);
+      setBlockReason(check.reason || 'You already have an active subscription for this month.');
+    }
+
     const pending = SubscriptionService.getPendingSubscription();
     if (!pending) {
       // If no subscription selected yet, fallback to default monthly setup
@@ -33,6 +42,11 @@ export default function CheckoutReviewPage() {
   }, []);
 
   const handleProceedToPayment = () => {
+    const check = SubscriptionService.canSubscribeThisMonth();
+    if (!check.allowed) {
+      setErrorMsg(check.reason || 'You already have an active subscription for this month.');
+      return;
+    }
     if (!termsAccepted) {
       setErrorMsg('Please accept the subscription terms and conditions to proceed.');
       return;
@@ -63,65 +77,102 @@ export default function CheckoutReviewPage() {
             gap: '0.4rem',
             color: 'var(--text-muted)',
             fontSize: '0.9rem',
-            marginBottom: '1rem',
+            textDecoration: 'none',
           }}
         >
           <ArrowLeft style={{ width: '16px', height: '16px' }} /> Back to Plan Selection
         </Link>
-        <h1 style={{ fontSize: '2.4rem', marginBottom: '0.5rem' }}>Review Your Subscription</h1>
-        <p style={{ color: 'var(--text-muted)', fontSize: '1rem' }}>
-          Verify your subscription tier and charitable contribution details before continuing to payment.
-        </p>
       </div>
 
-      {errorMsg && (
-        <div style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid #EF4444', color: '#FCA5A5', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontSize: '0.9rem' }}>
-          {errorMsg}
+      <div className="glass-panel" style={{ padding: '2.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+          <ShieldCheck style={{ width: '22px', height: '22px', color: 'var(--accent-cyan)' }} />
+          <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-cyan)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Checkout Review · Step 2 of 3
+          </span>
         </div>
-      )}
 
-      <div className="glass-panel" style={{ padding: '2.5rem', display: 'grid', gap: '2rem' }}>
-        {/* Order Items Breakdown */}
-        <div style={{ display: 'grid', gap: '1.25rem', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h1 style={{ fontSize: '2.2rem', marginBottom: '0.5rem' }}>Review Your Subscription</h1>
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', marginBottom: '2rem' }}>
+          Please verify your plan, charity selection, and billing frequency before proceeding to payment.
+        </p>
+
+        {/* Duplicate Subscription Warning */}
+        {alreadySubscribed && (
+          <div
+            className="glass-card"
+            style={{
+              padding: '1.25rem',
+              marginBottom: '1.5rem',
+              border: '1px solid rgba(255, 184, 0, 0.4)',
+              background: 'rgba(255, 184, 0, 0.05)',
+              display: 'flex',
+              gap: '0.75rem',
+              alignItems: 'center',
+            }}
+          >
+            <AlertTriangle style={{ width: '24px', height: '24px', color: '#FFB800', flexShrink: 0 }} />
+            <div style={{ fontSize: '0.9rem', color: '#FFB800' }}>
+              {blockReason} Only 1 subscription is permitted per month.
+            </div>
+          </div>
+        )}
+
+        {errorMsg && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              background: 'rgba(239, 68, 68, 0.1)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: 'var(--radius-sm)',
+              color: '#F87171',
+              fontSize: '0.85rem',
+              marginBottom: '1.5rem',
+            }}
+          >
+            {errorMsg}
+          </div>
+        )}
+
+        {/* Detailed Breakdown Card */}
+        <div className="glass-card" style={{ padding: '1.75rem', marginBottom: '2rem', display: 'grid', gap: '1.25rem' }}>
+          {/* Plan & Price */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
             <div>
               <div style={{ fontWeight: 700, fontSize: '1.15rem' }}>{planTitle}</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Billed every {frequencyLabel}. Cancel anytime.</div>
+              <div style={{ fontSize: '0.85rem', color: 'var(--text-subtle)' }}>Billed per {frequencyLabel}</div>
             </div>
-            <div style={{ fontSize: '1.25rem', fontWeight: 700 }}>
-              {priceFormatted} <span style={{ fontSize: '0.85rem', color: 'var(--text-subtle)' }}>/ {frequencyLabel}</span>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>{priceFormatted}</div>
+              <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>/ {frequencyLabel}</div>
             </div>
           </div>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(244, 63, 94, 0.06)', border: '1px solid rgba(244, 63, 94, 0.2)', padding: '1rem', borderRadius: 'var(--radius-md)' }}>
+          {/* Charity Allocation */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: '#F43F5E', fontSize: '0.95rem' }}>
-                <Heart style={{ width: '16px', height: '16px' }} />
-                Beneficiary Charity: {sub.charityName}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, color: 'var(--text-main)' }}>
+                <Heart style={{ width: '16px', height: '16px', color: '#F43F5E' }} /> Beneficiary Charity
               </div>
-              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem', marginTop: '0.2rem' }}>
-                Guaranteed {sub.contributionPercentage}% allocation from your subscription fee
+              <div style={{ fontSize: '0.85rem', color: '#F43F5E', fontWeight: 600, marginTop: '0.2rem' }}>
+                {sub.charityName}
               </div>
             </div>
-            <div style={{ textAlign: 'right', fontWeight: 700, color: '#F43F5E' }}>
-              ${sub.charityAmount} <span style={{ fontSize: '0.8rem', color: 'var(--text-subtle)' }}>/ cycle</span>
+            <div style={{ textAlign: 'right' }}>
+              <div style={{ fontWeight: 700, color: 'var(--text-main)' }}>{sub.contributionPercentage}%</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--accent-emerald)', fontWeight: 600 }}>${sub.charityAmount} / cycle</div>
             </div>
           </div>
-        </div>
 
-        {/* Total Cost Summary */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid var(--border-subtle)', paddingBottom: '1.5rem' }}>
-          <div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 700 }}>Total Due Today</div>
-            <div style={{ color: 'var(--text-subtle)', fontSize: '0.85rem' }}>Includes full platform features & draw eligibility</div>
-          </div>
-          <div style={{ fontSize: '2rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>
-            {priceFormatted}
+          {/* Order Summary Total */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: '0.25rem' }}>
+            <span style={{ fontSize: '1.1rem', fontWeight: 700 }}>Total Due Today</span>
+            <span style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--accent-gold)' }}>{priceFormatted}</span>
           </div>
         </div>
 
         {/* Terms Agreement */}
-        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+        <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '2rem' }}>
           <input
             type="checkbox"
             checked={termsAccepted}
@@ -129,7 +180,7 @@ export default function CheckoutReviewPage() {
             style={{ marginTop: '0.2rem', accentColor: 'var(--accent-cyan)', width: '16px', height: '16px', cursor: 'pointer' }}
           />
           <span>
-            I agree to the Digital Heroes platform terms of service. I understand that a minimum of 10% of my subscription fee will be allocated to my selected non-profit partner, and that I can cancel my subscription at any time.
+            I agree to the Digital Heroes platform terms of service. I understand that a minimum of 10% of my subscription fee will be allocated to my selected non-profit partner, and that subscriptions are limited to one per billing month.
           </span>
         </label>
 
@@ -142,13 +193,23 @@ export default function CheckoutReviewPage() {
           >
             <ArrowLeft style={{ width: '16px', height: '16px' }} /> Back
           </Link>
-          <button
-            onClick={handleProceedToPayment}
-            className="btn btn-gold"
-            style={{ flex: 2, padding: '0.85rem', justifyContent: 'center', fontSize: '1.05rem' }}
-          >
-            <Lock style={{ width: '16px', height: '16px' }} /> Proceed to Payment
-          </button>
+          {alreadySubscribed ? (
+            <Link
+              href="/dashboard"
+              className="btn btn-primary"
+              style={{ flex: 2, padding: '0.85rem', justifyContent: 'center', fontSize: '1.05rem' }}
+            >
+              Go to Dashboard <ArrowRight style={{ width: '16px', height: '16px' }} />
+            </Link>
+          ) : (
+            <button
+              onClick={handleProceedToPayment}
+              className="btn btn-gold"
+              style={{ flex: 2, padding: '0.85rem', justifyContent: 'center', fontSize: '1.05rem' }}
+            >
+              <Lock style={{ width: '16px', height: '16px' }} /> Proceed to Payment
+            </button>
+          )}
         </div>
       </div>
     </div>

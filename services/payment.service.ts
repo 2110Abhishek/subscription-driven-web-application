@@ -1,3 +1,5 @@
+import { SubscriptionService } from './subscription.service';
+
 export interface DemoPaymentInput {
   cardholderName: string;
   cardNumber: string;
@@ -23,13 +25,22 @@ export class PaymentService {
    * Does NOT send or store sensitive credit card credentials.
    */
   static async processDemoPayment(input: DemoPaymentInput): Promise<DemoPaymentResult> {
+    // Guard: Prevent subscribing more than once in the same month
+    const check = SubscriptionService.canSubscribeThisMonth();
+    if (!check.allowed) {
+      return {
+        success: false,
+        error: check.reason || 'You already have an active subscription for this month. Subscriptions are limited to once per month.',
+      };
+    }
+
     // Simulate network processing latency
     await new Promise((resolve) => setTimeout(resolve, 800));
 
     const cleanCard = input.cardNumber.replace(/[\s-]/g, '');
 
     // Intentional failure trigger for demo testing:
-    // If card ends with '0000' or is '4000000000000000'
+    // If card ends with '0000' or is '0000000000000000'
     if (cleanCard.endsWith('0000') || cleanCard === '0000000000000000') {
       return {
         success: false,
