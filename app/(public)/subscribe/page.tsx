@@ -1,9 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Heart, Sparkles, Check, ArrowRight, ShieldCheck } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { Heart, Sparkles, Check, ArrowRight } from 'lucide-react';
+import { SubscriptionService } from '@/services/subscription.service';
 
 export default function SubscribePage() {
+  const router = useRouter();
   const [charities, setCharities] = useState<any[]>([]);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedCharity, setSelectedCharity] = useState('');
@@ -15,9 +18,17 @@ export default function SubscribePage() {
       try {
         const res = await fetch('/api/charities');
         const data = await res.json();
-        if (data && data.charities && data.charities.length > 0) {
-          setCharities(data.charities);
-          setSelectedCharity(data.charities[0].id);
+        const list = data?.charities || [];
+        setCharities(list);
+
+        // Check for existing pending subscription selections
+        const pending = SubscriptionService.getPendingSubscription();
+        if (pending) {
+          setBillingCycle(pending.plan || 'monthly');
+          setSelectedCharity(pending.charityId || (list[0]?.id ?? ''));
+          setContributionPct(pending.contributionPercentage || 15);
+        } else if (list.length > 0) {
+          setSelectedCharity(list[0].id);
         }
       } catch (e) {
         console.error('Failed to load charities:', e);
@@ -29,32 +40,24 @@ export default function SubscribePage() {
   const price = billingCycle === 'monthly' ? 15 : 150;
   const charityAmount = ((price * contributionPct) / 100).toFixed(2);
 
-  const handleCheckout = async () => {
+  const handleProceedToReview = (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    try {
-      const res = await fetch('/api/stripe/checkout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          plan: billingCycle,
-          charityId: selectedCharity,
-          contributionPercentage: contributionPct,
-        }),
-      });
 
-      const data = await res.json();
-      if (data.url) {
-        window.location.href = data.url;
-      } else {
-        // Direct redirect if Stripe checkout session URL is not configured
-        window.location.href = `/dashboard?subscribed=true&plan=${billingCycle}`;
-      }
-    } catch (err) {
-      // Fallback redirect
-      window.location.href = `/dashboard?subscribed=true&plan=${billingCycle}`;
-    } finally {
-      setLoading(false);
-    }
+    const selectedCharityObj = charities.find((c) => c.id === selectedCharity);
+    const charityName = selectedCharityObj?.name || 'Golf For Good Foundation';
+
+    // Save pending subscription choices before proceeding to checkout
+    SubscriptionService.savePendingSubscription({
+      plan: billingCycle,
+      charityId: selectedCharity,
+      charityName,
+      contributionPercentage: contributionPct,
+      charityAmount,
+      price,
+    });
+
+    router.push('/checkout');
   };
 
   return (
@@ -66,7 +69,7 @@ export default function SubscribePage() {
         </div>
         <h1 style={{ fontSize: '2.8rem', marginBottom: '1rem' }}>Select Your Subscription Plan</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>
-          Unlock score tracking, automated draw entry, and direct charity support.
+          Choose your billing frequency, select your beneficiary charity, and review before payment.
         </p>
 
         {/* Billing Toggle */}
@@ -79,18 +82,20 @@ export default function SubscribePage() {
           border: '1px solid var(--border-subtle)',
         }}>
           <button
+            type="button"
             onClick={() => setBillingCycle('monthly')}
             className={`btn ${billingCycle === 'monthly' ? 'btn-primary' : 'btn-secondary'}`}
             style={{ borderRadius: 'var(--radius-full)', padding: '0.5rem 1.5rem', fontSize: '0.9rem' }}
           >
-            Monthly Billing
+            Monthly Billing ($15/mo)
           </button>
           <button
+            type="button"
             onClick={() => setBillingCycle('yearly')}
             className={`btn ${billingCycle === 'yearly' ? 'btn-primary' : 'btn-secondary'}`}
             style={{ borderRadius: 'var(--radius-full)', padding: '0.5rem 1.5rem', fontSize: '0.9rem' }}
           >
-            Yearly Billing <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>(Save 16%)</span>
+            Yearly Billing ($150/yr) <span style={{ fontSize: '0.75rem', opacity: 0.8 }}>(Save 16%)</span>
           </button>
         </div>
       </div>
@@ -161,12 +166,12 @@ export default function SubscribePage() {
         </div>
 
         <button
-          onClick={handleCheckout}
+          onClick={handleProceedToReview}
           disabled={loading}
           className="btn btn-gold"
-          style={{ width: '100%', padding: '1rem', fontSize: '1.1rem' }}
+          style={{ width: '100%', padding: '1rem', fontSize: '1.1rem', justifyContent: 'center' }}
         >
-          {loading ? 'Processing...' : 'Proceed to Checkout'} <ArrowRight style={{ width: '20px', height: '20px' }} />
+          {loading ? 'Loading Review...' : 'Continue to Checkout Review'} <ArrowRight style={{ width: '20px', height: '20px' }} />
         </button>
       </div>
     </div>

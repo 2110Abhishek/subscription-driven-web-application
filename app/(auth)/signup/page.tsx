@@ -32,9 +32,9 @@ export default function SignupPage() {
         throw new Error(data.error || 'Failed to create account');
       }
 
-      // Automatically log the new real user in
+      // Automatically log the new user in and navigate to plan selection
       loginAs('subscriber', email, fullName);
-      router.push('/dashboard');
+      router.push('/subscribe');
     } catch (err: any) {
       setErrorMsg(err.message || 'Signup failed');
       setLoading(false);

@@ -28,3 +28,21 @@ export const drawConfigSchema = z.object({
 export const proofUploadSchema = z.object({
   winnerId: z.string().uuid(),
 });
+
+export const paymentInputSchema = z.object({
+  cardholderName: z.string().min(2, 'Cardholder name is required'),
+  cardNumber: z
+    .string()
+    .min(15, 'Card number must be at least 15 digits')
+    .max(19, 'Card number is too long')
+    .regex(/^[\d\s-]+$/, 'Card number must only contain digits and spaces'),
+  expiryDate: z
+    .string()
+    .regex(/^(0[1-9]|1[0-2])\/?([0-9]{2})$/, 'Expiry must be in MM/YY format'),
+  cvv: z
+    .string()
+    .min(3, 'CVV must be 3 or 4 digits')
+    .max(4, 'CVV cannot exceed 4 digits')
+    .regex(/^\d+$/, 'CVV must be numeric'),
+  billingEmail: z.string().email('Please enter a valid billing email address'),
+});

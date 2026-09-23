@@ -2,12 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { Trophy, Heart, Award, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import { Trophy, Heart, Award, ArrowRight, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth/auth-context';
+import { SubscriptionService, ActiveSubscription } from '@/services/subscription.service';
 
 export default function DashboardOverviewPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [activeSub, setActiveSub] = useState<ActiveSubscription | null>(null);
   const [data, setData] = useState<{
     scores: { id: string; score: number; scoreDate: string }[];
     subscription: { status: string; plan: string; renewalDate: string };
@@ -16,6 +18,13 @@ export default function DashboardOverviewPage() {
   } | null>(null);
 
   useEffect(() => {
+    // 1. Check local/service active subscription
+    const localSub = SubscriptionService.getCurrentSubscription();
+    if (localSub) {
+      setActiveSub(localSub);
+    }
+
+    // 2. Fetch live data
     async function loadData() {
       try {
         const email = user?.email || 'agchoudhari2110@gmail.com';
@@ -35,8 +44,16 @@ export default function DashboardOverviewPage() {
 
   const scores = data?.scores || [];
   const totalWinnings = data?.winningsSummary?.totalAmount || '$0.00';
-  const renewalDate = data?.subscription?.renewalDate || 'October 15, 2026';
-  const charityName = data?.charities?.[0]?.name || 'Golf For Good Foundation';
+
+  // Prefer local active subscription if activated via checkout/payment
+  const planName = activeSub?.plan === 'yearly' ? 'Yearly Hero Plan' : 'Monthly Hero Plan';
+  const renewalDate = activeSub?.renewalDate || data?.subscription?.renewalDate || 'October 15, 2026';
+  const charityName = activeSub?.charityName || data?.charities?.[0]?.name || 'Golf For Good Foundation';
+  const charityPercentage = activeSub?.contributionPercentage || 15;
+  const isSubscribed = user?.isSubscribed || activeSub?.status === 'active';
+
+  // Eligibility logic per PRD
+  const isDrawEligible = isSubscribed && scores.length === 5;
 
   return (
     <div style={{ display: 'grid', gap: '2rem' }}>
@@ -50,16 +67,30 @@ export default function DashboardOverviewPage() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <h1 style={{ fontSize: '2rem', marginBottom: '0.4rem' }}>
-              Welcome Back, {user?.name || 'Hero'}!
-            </h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '0.4rem' }}>
+              <h1 style={{ fontSize: '2rem' }}>
+                Welcome Back, {user?.name || 'Hero'}!
+              </h1>
+              <span className={isSubscribed ? 'badge badge-active' : 'badge badge-warning'}>
+                {isSubscribed ? `${planName} Active` : 'Subscription Required'}
+              </span>
+            </div>
             <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem' }}>
-              Your active subscription is current. Renewal on {renewalDate}.
+              {isSubscribed
+                ? `Your active subscription is current. Renewal scheduled for ${renewalDate}.`
+                : 'Subscribe to a plan to activate score tracking and monthly draw participation.'}
             </p>
           </div>
-          <Link href="/dashboard/scores" className="btn btn-primary">
-            + Enter New Score
-          </Link>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            {!isSubscribed && (
+              <Link href="/subscribe" className="btn btn-gold">
+                Subscribe Now
+              </Link>
+            )}
+            <Link href="/dashboard/scores" className="btn btn-primary">
+              + Enter New Score
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -72,7 +103,11 @@ export default function DashboardOverviewPage() {
           </div>
           <div style={{ fontSize: '1.8rem', fontWeight: 800 }}>{scores.length} / 5</div>
           <div style={{ color: 'var(--text-subtle)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
-            {scores.length === 5 ? 'Eligible for Monthly Draw' : `${5 - scores.length} more needed for entry`}
+            {isDrawEligible
+              ? '✓ Eligible for Monthly Draw'
+              : scores.length < 5
+              ? `Waiting for scores (${5 - scores.length} more needed)`
+              : 'Requires active subscription'}
           </div>
         </div>
 
@@ -81,7 +116,7 @@ export default function DashboardOverviewPage() {
             <span style={{ color: 'var(--text-subtle)', fontSize: '0.85rem', fontWeight: 600 }}>CHARITY PLEDGE</span>
             <Heart style={{ width: '18px', height: '18px', color: '#F43F5E' }} />
           </div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#F43F5E' }}>15%</div>
+          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#F43F5E' }}>{charityPercentage}%</div>
           <div style={{ color: 'var(--text-subtle)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
             {charityName}
           </div>
