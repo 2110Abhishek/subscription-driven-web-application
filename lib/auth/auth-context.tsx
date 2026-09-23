@@ -15,7 +15,7 @@ interface AuthContextType {
   role: UserRole;
   user: User | null;
   setRole: (role: UserRole) => void;
-  loginAs: (role: UserRole, email?: string, name?: string) => void;
+  loginAs: (role: UserRole, email?: string, name?: string, isSubscribed?: boolean) => void;
   logout: () => void;
 }
 
@@ -37,11 +37,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else if (savedRole && ['guest', 'subscriber', 'admin'].includes(savedRole)) {
         setRoleState(savedRole);
         if (savedRole !== 'guest') {
+          // Check if active subscription exists in storage
+          let hasActiveSub = false;
+          try {
+            const activeSubJson = localStorage.getItem('digital_heroes_active_subscription');
+            if (activeSubJson) {
+              const parsedSub = JSON.parse(activeSubJson);
+              hasActiveSub = parsedSub.status === 'active';
+            }
+          } catch {}
+
           const fallback = {
             name: savedRole === 'admin' ? 'Abhishek Choudhari' : 'Abhishek Choudhari',
             email: savedRole === 'admin' ? 'admin@digitalheroes.co.in' : 'agchoudhari2110@gmail.com',
             role: savedRole,
-            isSubscribed: true,
+            isSubscribed: savedRole === 'admin' ? true : hasActiveSub,
           };
           setUser(fallback);
           localStorage.setItem('digital_heroes_user', JSON.stringify(fallback));
@@ -59,27 +69,56 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
       localStorage.removeItem('digital_heroes_user');
     } else {
+      let hasActiveSub = false;
+      try {
+        const activeSubJson = localStorage.getItem('digital_heroes_active_subscription');
+        if (activeSubJson) {
+          const parsedSub = JSON.parse(activeSubJson);
+          hasActiveSub = parsedSub.status === 'active';
+        }
+      } catch {}
+
       const newUser = {
         name: newRole === 'admin' ? 'Abhishek Choudhari' : 'Abhishek Choudhari',
         email: newRole === 'admin' ? 'admin@digitalheroes.co.in' : 'agchoudhari2110@gmail.com',
         role: newRole,
-        isSubscribed: true,
+        isSubscribed: newRole === 'admin' ? true : hasActiveSub,
       };
       setUser(newUser);
       localStorage.setItem('digital_heroes_user', JSON.stringify(newUser));
     }
   };
 
-  const loginAs = (loginRole: UserRole, email?: string, name?: string) => {
+  const loginAs = (loginRole: UserRole, email?: string, name?: string, isSubscribed?: boolean) => {
     setRoleState(loginRole);
     localStorage.setItem('digital_heroes_demo_role', loginRole);
     const resolvedName = name || (loginRole === 'admin' ? 'Abhishek Choudhari' : 'Abhishek Choudhari');
     const resolvedEmail = email || (loginRole === 'admin' ? 'admin@digitalheroes.co.in' : 'agchoudhari2110@gmail.com');
+
+    let finalSubscribed = isSubscribed;
+    if (finalSubscribed === undefined) {
+      if (loginRole === 'admin') {
+        finalSubscribed = true;
+      } else {
+        try {
+          const activeSubJson = localStorage.getItem('digital_heroes_active_subscription');
+          if (activeSubJson) {
+            const parsedSub = JSON.parse(activeSubJson);
+            finalSubscribed = parsedSub.status === 'active';
+          } else {
+            finalSubscribed = false;
+          }
+        } catch {
+          finalSubscribed = false;
+        }
+      }
+    }
+
     const newUser = {
       name: resolvedName,
       email: resolvedEmail,
       role: loginRole,
-      isSubscribed: true,
+      isSubscribed: finalSubscribed,
     };
     setUser(newUser);
     localStorage.setItem('digital_heroes_user', JSON.stringify(newUser));

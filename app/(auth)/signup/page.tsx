@@ -32,8 +32,8 @@ export default function SignupPage() {
         throw new Error(data.error || 'Failed to create account');
       }
 
-      // Automatically log the new user in and navigate to plan selection
-      loginAs('subscriber', email, fullName);
+      // Automatically log the new user in (unsubscribed state) and navigate to plan selection
+      loginAs('subscriber', email, fullName, false);
       router.push('/subscribe');
     } catch (err: any) {
       setErrorMsg(err.message || 'Signup failed');

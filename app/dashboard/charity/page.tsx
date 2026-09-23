@@ -3,35 +3,47 @@
 import { useState, useEffect } from 'react';
 import { Heart, Check, Save } from 'lucide-react';
 import { useAuth } from '@/lib/auth/auth-context';
+import { SubscriptionService } from '@/services/subscription.service';
+import { defaultCharities } from '@/services/charity.service';
 
 export default function DashboardCharityPage() {
   const { user } = useAuth();
-  const [charities, setCharities] = useState<any[]>([]);
-  const [selectedId, setSelectedId] = useState<string>('');
+  const [charities, setCharities] = useState<any[]>(defaultCharities);
+  const [selectedId, setSelectedId] = useState<string>(defaultCharities[0].id);
   const [pct, setPct] = useState(15);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    // 1. Initial values from active subscription state
+    const currentSub = SubscriptionService.getCurrentSubscription();
+    if (currentSub?.charityId) {
+      setSelectedId(currentSub.charityId);
+    }
+    if (currentSub?.contributionPercentage) {
+      setPct(currentSub.contributionPercentage);
+    }
+
+    // 2. Fetch list of verified charities from API
     async function loadCharities() {
       try {
         const email = user?.email || 'agchoudhari2110@gmail.com';
         const res = await fetch(`/api/subscriber/charity?email=${encodeURIComponent(email)}`);
-        const data = await res.json();
-        if (data && data.charities) {
-          setCharities(data.charities);
-          if (data.selectedCharityId) {
-            setSelectedId(data.selectedCharityId);
-          } else if (data.charities.length > 0) {
-            setSelectedId(data.charities[0].id);
-          }
-          if (data.contributionPercentage) {
-            setPct(data.contributionPercentage);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.charities && data.charities.length > 0) {
+            setCharities(data.charities);
+            if (!currentSub?.charityId && data.selectedCharityId) {
+              setSelectedId(data.selectedCharityId);
+            }
+            if (!currentSub?.contributionPercentage && data.contributionPercentage) {
+              setPct(data.contributionPercentage);
+            }
           }
         }
       } catch (err) {
-        console.error('Failed to load charities:', err);
+        // Fallback to default verified charities
       } finally {
         setLoading(false);
       }
@@ -42,8 +54,21 @@ export default function DashboardCharityPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
+      const selectedObj = charities.find((c) => c.id === selectedId);
+      const charityName = selectedObj?.name || 'Golf For Good Foundation';
+
+      // 1. Persist to active subscription in localStorage
+      const currentSub = SubscriptionService.getCurrentSubscription();
+      if (currentSub) {
+        currentSub.charityId = selectedId;
+        currentSub.charityName = charityName;
+        currentSub.contributionPercentage = pct;
+        localStorage.setItem('digital_heroes_active_subscription', JSON.stringify(currentSub));
+      }
+
+      // 2. Persist to API in background
       const email = user?.email || 'agchoudhari2110@gmail.com';
-      const res = await fetch('/api/subscriber/charity', {
+      await fetch('/api/subscriber/charity', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -51,12 +76,10 @@ export default function DashboardCharityPage() {
           charityId: selectedId,
           contributionPercentage: pct,
         }),
-      });
+      }).catch(() => {});
 
-      if (res.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2500);
-      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
     } catch (err) {
       console.error('Failed to save charity pledge:', err);
     } finally {
@@ -110,7 +133,7 @@ export default function DashboardCharityPage() {
         <h3 style={{ fontSize: '1.25rem', marginBottom: '1.5rem' }}>Select Beneficiary Charity</h3>
 
         {loading ? (
-          <div style={{ color: 'var(--text-subtle)', padding: '1rem' }}>Loading verified charities from database...</div>
+          <div style={{ color: 'var(--text-subtle)', padding: '1rem' }}>Loading verified charities...</div>
         ) : (
           <div style={{ display: 'grid', gap: '1rem' }}>
             {charities.map((c) => {
@@ -132,7 +155,7 @@ export default function DashboardCharityPage() {
                 >
                   <div>
                     <h4 style={{ fontSize: '1.1rem', marginBottom: '0.25rem' }}>{c.name}</h4>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{c.desc}</p>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>{c.description || c.desc}</p>
                   </div>
                   {isSelected && (
                     <div className="badge badge-active" style={{ background: 'rgba(244, 63, 94, 0.15)', color: '#F43F5E' }}>
